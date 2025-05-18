@@ -15,13 +15,3 @@ clean:
 	rm -f $(ZIP_FILE)
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -delete
-
-install: build
-	@echo "Installing plugin to Calibre..."
-	calibre-customize -a $(ZIP_FILE)
-	@echo "Plugin installed successfully"
-
-uninstall:
-	@echo "Uninstalling plugin from Calibre..."
-	calibre-customize -r $(PLUGIN_NAME)
-	@echo "Plugin uninstalled successfully"
