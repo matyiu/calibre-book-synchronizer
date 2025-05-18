@@ -1,6 +1,6 @@
 PLUGIN_NAME = calibre-book-synchronizer
 VERSION = 1.0.0
-ZIP_FILE = $(PLUGIN_NAME)_v$(VERSION).zip
+ZIP_FILE = $(PLUGIN_NAME).zip
 SRC_DIR = src
 
 .PHONY: clean build
