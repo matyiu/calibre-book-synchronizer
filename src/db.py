@@ -1,6 +1,7 @@
 import json
 from typing import List, Dict, Any
-
+from calibre.db.legacy import LibraryDatabase
+from .book import LinkedBook
 class FolderCollection:
     def __init__(self, library_id: str, path: str = "calibre-symlink-importer-folders.json"):
         self.library_id = library_id
@@ -96,3 +97,11 @@ class SyncedBookCollection:
                 return
         self._data.append({"id": self.library_id, "books": books})
         self._save() 
+
+class BookCollection:
+    def __init__(self, db: LibraryDatabase):
+        self.db = db
+
+    def associate_file_to_book(self, book_id: str, book: LinkedBook):
+        self.db.add_format(book_id, book.format(), book.get_symlink_path()[1], replace=True, run_hooks=False)
+        

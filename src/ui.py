@@ -1,18 +1,15 @@
 from calibre.gui2.actions import InterfaceAction
-from calibre.gui2 import error_dialog, info_dialog
 import os
-from calibre.ebooks.metadata.meta import get_metadata
-from calibre_plugins.symlink_importer.main import SymlinkImporter
-from calibre_plugins.symlink_importer.db import FolderCollection
-from calibre_plugins.symlink_importer.config_dialog import ConfigDialog
-from calibre_plugins.symlink_importer.importer import Importer
+from .db import FolderCollection
+from .config_dialog import ConfigDialog
+from .importer import Importer
 
-class SymlinkImporterUI(InterfaceAction):
-    name = 'SymlinkImporter'
+class BookSyncUI(InterfaceAction):
+    name = 'BookSync'
     action_spec = (
-        'Sincronizar carpetas',
+        'Sincronizar libros',
         None,
-        'Sincroniza libros desde carpetas externas mediante enlaces simbólicos.',
+        'Sincroniza libros desde carpetas externas.',
         None
     )
 
@@ -49,6 +46,7 @@ class SymlinkImporterUI(InterfaceAction):
             f"Ya sincronizados: {summary['already_synced']} | "
             f"Nuevos a sincronizar: {summary['new_books']}"
         )
+        print(msg)
         self.gui.status_bar.showMessage(msg, 10000)
 
     def apply_settings(self):

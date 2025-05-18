@@ -3,12 +3,12 @@ from PyQt5.QtWidgets import (
     QFileDialog, QWidget, QHeaderView, QMessageBox
 )
 from PyQt5.QtCore import Qt
-from calibre_plugins.symlink_importer.db import FolderCollection
+from .db import FolderCollection
 import datetime
 
 INTRO_TEXT = (
-    "Este plugin permite sincronizar libros desde carpetas externas mediante enlaces simbólicos. "
-    "Ningún archivo será movido, eliminado ni copiado en la biblioteca. "
+    "Este plugin permite sincronizar libros desde carpetas externas."
+    "Ningún archivo será movido, eliminado ni copiado en la biblioteca."
     "Solo se crearán enlaces simbólicos a los archivos originales."
 )
 
@@ -56,7 +56,6 @@ class ConfigDialog(QDialog):
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(path))
-        # Botón eliminar
         btn = QPushButton("Eliminar")
         btn.clicked.connect(lambda _, p=path: self.remove_folder(p))
         w = QWidget()
@@ -69,7 +68,6 @@ class ConfigDialog(QDialog):
     def add_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Selecciona una carpeta para sincronizar")
         if folder:
-            # Evitar duplicados
             if any(folder == self.table.item(row, 0).text() for row in range(self.table.rowCount())):
                 QMessageBox.warning(self, "Carpeta duplicada", "Esta carpeta ya está en la lista.")
                 return
@@ -83,5 +81,4 @@ class ConfigDialog(QDialog):
 
     def remove_folder(self, path):
         self.folders_db.remove_folder(path)
-        # Recargar tabla
         self.load_folders() 

@@ -1,9 +1,11 @@
 import os
 import hashlib
-from calibre_plugins.symlink_importer.db import FolderCollection, SyncedBookCollection
+
+from .book import LinkedBook
+from .db import FolderCollection, SyncedBookCollection, BookCollection
 from calibre.ebooks.metadata.meta import get_metadata
-from calibre.ebooks.metadata.book.base import Metadata
 from calibre.gui2.ui import MainWindow
+from .metadata import ImporterMetadata
 try:
     from calibre.db.legacy import LibraryDatabase
 except ImportError:
@@ -17,9 +19,9 @@ class Importer:
         self.synced_db = SyncedBookCollection(library_id)
         self.library_path = self.gui.current_db.library_path
         self.db: LibraryDatabase = self.gui.current_db
+        self.book_db = BookCollection(self.db)
 
-    def _get_book_hash(self, file_path):
-        # Hash SHA256 del contenido del archivo
+    def _get_book_hash(self, file_path: str) -> str:
         h = hashlib.sha256()
         with open(file_path, 'rb') as f:
             while True:
@@ -27,101 +29,83 @@ class Importer:
                 if not chunk:
                     break
                 h.update(chunk)
+
         return h.hexdigest()
 
-    def _get_book_id(self, file_path, metadata):
-        # ID único: título + autor + nombre de archivo
-        title = metadata.get('title', 'Desconocido')
-        author = metadata.get('authors', ['Desconocido'])[0]
+    def _get_book_id(self, file_path: str, metadata: ImporterMetadata) -> str:
+        title = metadata.title
+        author = metadata.author
         base = os.path.splitext(os.path.basename(file_path))[0]
+
         return f"{title}_{author}_{base}"
 
-    def _get_metadata(self, file_path):
+    def _extract_metadata(self, file_path: str) -> ImporterMetadata:
+        extension = os.path.splitext(file_path)[1]
+
         try:
             with open(file_path, 'rb') as f:
-                format = os.path.splitext(file_path)[1].lower()
-                mi = get_metadata(f, format)
+                mi = get_metadata(f, extension)
+                print(f"[SymlinkImporter] Metadatos extraídos de {file_path}: {mi}")
+
             title = getattr(mi, 'title', None)
-            authors = getattr(mi, 'authors', None)
+            author = getattr(mi, 'authors', None)
+
             if not title:
                 title = os.path.splitext(os.path.basename(file_path))[0]
-            if not authors:
-                authors = ['Desconocido']
-            if isinstance(authors, str):
-                authors = [authors]
-            print(f"[SymlinkImporter] Metadatos extraídos de {file_path}: Título='{title}', Autor(es)={authors}")
-            # Devuelve también el objeto Metadata para add_books
-            return {
-                'title': title,
-                'authors': authors,
-                'mi': mi
-            }
+            if not author:
+                author = ['Desconocido']
+            if not isinstance(author, str):
+                author = author[0]
+
+            return ImporterMetadata(title, author, extension)
+
         except Exception as e:
             print(f"[SymlinkImporter] Error extrayendo metadatos de {file_path}: {e}")
-            # Usa el nombre de archivo como título si todo falla
-            mi = Metadata(os.path.splitext(os.path.basename(file_path))[0], ['Desconocido'])
-            return {
-                'title': os.path.splitext(os.path.basename(file_path))[0],
-                'authors': ['Desconocido'],
-                'mi': mi
-            }
-
-    def _symlink_path(self, metadata, ext):
-        author = metadata['authors'][0] if metadata['authors'] else 'Desconocido'
-        title = metadata['title'] or 'Desconocido'
-        author_dir = author.replace('/', '_')
-        title_dir = title.replace('/', '_')
-        dest_dir = os.path.join(self.library_path, author_dir, title_dir)
-        os.makedirs(dest_dir, exist_ok=True)
-        filename = f"{title} - {author}{ext}"
-        return os.path.join(dest_dir, filename)
+            return ImporterMetadata(os.path.splitext(os.path.basename(file_path))[0], 'Desconocido', extension)
 
     def sync_books(self):
         folders = self.folders_db.get_folders()
         exts = ('.epub', '.pdf')
         found_books = []
+
         for folder in folders:
             for root, dirs, files in os.walk(folder['path']):
                 for file in files:
                     if file.lower().endswith(exts):
                         found_books.append(os.path.join(root, file))
+
         already_synced = 0
         new_books = 0
+        not_able_to_sync = 0
+
         synced_books = self.synced_db.get_books()
         synced_hashes = set(b['hash'] for b in synced_books)
+
         for file_path in found_books:
             try:
                 file_hash = self._get_book_hash(file_path)
             except Exception as e:
                 print(f"[SymlinkImporter] Error calculando hash de {file_path}: {e}")
+                not_able_to_sync += 1
                 continue
+
             if file_hash in synced_hashes:
                 already_synced += 1
+                print(f"[SymlinkImporter] Libro ya sincronizado: {file_path}")
                 continue
+
             # Extraer metadatos
-            metadata = self._get_metadata(file_path)
-            ext = os.path.splitext(file_path)[1]
-            symlink_path = self._symlink_path(metadata, ext)
-            mi = metadata['mi']
-            # Crear symlink si no existe
-            if not os.path.exists(symlink_path):
-                try:
-                    os.symlink(file_path, symlink_path)
-                    print(f"[SymlinkImporter] Symlink creado: {symlink_path} -> {file_path}")
-                except FileExistsError:
-                    print(f"[SymlinkImporter] Symlink ya existe: {symlink_path}")
-                except Exception as e:
-                    print(f"[SymlinkImporter] Error creando symlink: {e}")
-            # Añadir a Calibre usando la API
+            book = LinkedBook(file_path, self._extract_metadata(file_path), self.library_path)
+
             try:
-                ids = self.db.add_books([symlink_path], (ext), [mi], add_duplicates=False)
-                print(f"[SymlinkImporter] add_books({symlink_path}, {ext}, {mi}) -> {ids}")
-                calibre_id = str(ids[0]) if ids else ''
+                calibre_id = self.db.add_books([book.get_file_path()], [book.format()], [book.get_calibre_metadata()], add_duplicates=False)
+                print(f"[SymlinkImporter] add_books({book.get_calibre_metadata()}) -> {calibre_id}")
             except Exception as e:
                 print(f"[SymlinkImporter] Error añadiendo libro a Calibre: {e}")
-                calibre_id = ''
+                continue
+
             # Registrar en SyncedBookCollection
-            book_id = self._get_book_id(file_path, metadata)
+            book_id = self._get_book_id(file_path, book.get_metadata())
             self.synced_db.add_book({
                 'folder': os.path.dirname(file_path),
                 'file_path': file_path,
