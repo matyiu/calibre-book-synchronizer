@@ -1,7 +1,10 @@
 from calibre.gui2.actions import InterfaceAction
 from calibre.gui2 import error_dialog, info_dialog
 import os
+from calibre.ebooks.metadata.meta import get_metadata
+from calibre_plugins.symlink_importer.main import SymlinkImporter
 from calibre_plugins.symlink_importer.db import FolderCollection
+from calibre_plugins.symlink_importer.config_dialog import ConfigDialog
 
 class SymlinkImporterUI(InterfaceAction):
     name = 'SymlinkImporter'
@@ -14,6 +17,7 @@ class SymlinkImporterUI(InterfaceAction):
 
     def genesis(self):
         self.qaction.setMenu(self.create_menu())
+        self.qaction.triggered.connect(self.apply_action)
 
     def create_menu(self):
         from PyQt5.QtWidgets import QMenu, QAction
@@ -24,27 +28,18 @@ class SymlinkImporterUI(InterfaceAction):
         return menu
 
     def open_config(self):
-        info_dialog(self.gui, 'Configuración', 'Aquí irá la configuración del plugin.', show=True)
+        library_id = os.path.basename(self.gui.current_db.library_path)
+        dlg = ConfigDialog(library_id, parent=self.gui)
+        dlg.exec_()
 
     def apply_action(self):
         library_id = os.path.basename(self.gui.current_db.library_path)
         folders_db = FolderCollection(library_id)
         folders = folders_db.get_folders()
-        if not folders:
-            error_dialog(
-                self.gui,
-                'Sin carpetas configuradas',
-                'No tienes carpetas configuradas para sincronizar. Ve a configuración para añadir una.',
-                show=True
-            )
+        if len(folders) == 0:
+            dlg = ConfigDialog(library_id, parent=self.gui)
+            dlg.exec_()
             return
-        # Placeholder de sincronización
-        info_dialog(
-            self.gui,
-            'Sincronización',
-            f'Se iniciaría la sincronización de {len(folders)} carpeta(s).',
-            show=True
-        )
 
     def apply_settings(self):
-        pass  # Placeholder para compatibilidad futura
+        pass
